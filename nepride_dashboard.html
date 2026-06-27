@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>NepRide Dashboard</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+:root{
+  --green:#1A9E6E;--green-d:#0E6B4A;--green-l:#E3F7F0;
+  --red:#D94F3D;--red-l:#FDF0EE;
+  --amber:#E59B1A;--amber-l:#FEF7E6;
+  --ink:#1A1C1E;--ink2:#4A4D52;--ink3:#8A8F97;
+  --bg:#F5F7FA;--card:#FFFFFF;--border:#E4E7EB;
+  --radius:10px;--radius-sm:6px;
+  --shadow:0 1px 4px rgba(0,0,0,.08),0 4px 16px rgba(0,0,0,.06);
+  --font:'Inter',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--ink);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* topbar */
+.topbar{height:52px;background:var(--card);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 18px;gap:14px;flex-shrink:0;z-index:300}
+.logo{font-size:17px;font-weight:700;color:var(--green);letter-spacing:-.5px}
+.logo span{color:var(--ink);font-weight:400}
+.pill-live{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;background:var(--green-l);color:var(--green-d)}
+.pulse{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 1.4s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.stat-chip{font-size:11px;color:var(--ink2);padding:4px 10px;border:1px solid var(--border);border-radius:20px;background:var(--card)}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.api-badge{font-size:11px;padding:4px 10px;border-radius:20px;font-weight:600}
+.api-connected{background:#E3F7F0;color:var(--green-d)}
+.api-disconnected{background:#FDF0EE;color:#7A2010}
+
+/* layout */
+.body{display:flex;flex:1;min-height:0}
+
+/* sidebar */
+.sidebar{width:330px;flex-shrink:0;background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;z-index:200}
+.sidebar-scroll{flex:1;overflow-y:auto;padding:14px}
+.sidebar-scroll::-webkit-scrollbar{width:4px}
+.sidebar-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+.sec-label{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--ink3);margin:14px 0 6px}
+.sec-label:first-child{margin-top:0}
+
+/* hint */
+.hint-box{background:var(--green-l);border:1px solid #9BE5C8;border-radius:var(--radius-sm);padding:10px 12px;font-size:12px;color:var(--green-d);line-height:1.6;margin-bottom:10px}
+.hint-box b{font-weight:700}
+
+/* loc cards */
+.loc-card{border:1.5px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:8px;cursor:pointer;transition:border-color .2s,background .2s;display:flex;align-items:center;gap:10px}
+.loc-card:hover,.loc-card.active-pin{border-color:var(--green);background:var(--green-l)}
+.loc-card.filled{border-color:var(--green)}
+.loc-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;border:2.5px solid #fff;box-shadow:0 0 0 1.5px currentColor}
+.dot-g{color:var(--green);background:var(--green)}
+.dot-r{color:var(--red);background:var(--red)}
+.loc-text{flex:1}
+.loc-name{font-size:13px;font-weight:500}
+.loc-coords{font-size:11px;color:var(--ink3);margin-top:1px;font-variant-numeric:tabular-nums}
+.loc-clear{font-size:15px;color:var(--ink3);cursor:pointer;width:22px;height:22px;border-radius:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.loc-clear:hover{background:var(--red-l);color:var(--red)}
+
+/* quick chips */
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px}
+.chip{font-size:11px;padding:4px 9px;border:1px solid var(--border);border-radius:20px;cursor:pointer;background:var(--card);color:var(--ink2);transition:all .2s;white-space:nowrap}
+.chip:hover{border-color:var(--green);color:var(--green-d);background:var(--green-l)}
+
+/* fare */
+.fare-card{border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:8px;transition:opacity .3s}
+.fare-card.dim{opacity:.4;pointer-events:none}
+.fare-row{display:flex;justify-content:space-between;align-items:flex-start}
+.fare-num{font-size:24px;font-weight:700}
+.fare-meta{font-size:11px;color:var(--ink3);margin-top:2px}
+.ride-pills{display:flex;gap:6px;margin:10px 0 0}
+.rpill{flex:1;text-align:center;border:1.5px solid var(--border);border-radius:8px;padding:7px 4px;cursor:pointer;font-size:11px;font-weight:500;color:var(--ink2);transition:all .2s}
+.rpill:hover{border-color:var(--green)}
+.rpill.on{border-color:var(--green);background:var(--green-l);color:var(--green-d)}
+.rpill-icon{font-size:17px;display:block;margin-bottom:2px}
+.rpill-price{font-size:12px;font-weight:700;color:var(--green-d);display:block;margin-top:2px}
+
+/* driver cards */
+.dcard{border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;margin-bottom:7px;cursor:pointer;display:flex;align-items:center;gap:10px;transition:all .2s}
+.dcard:hover{border-color:var(--green);box-shadow:0 0 0 3px var(--green-l)}
+.dcard.on{border-color:var(--green);background:var(--green-l)}
+.avatar{border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;position:relative}
+.av-dot{position:absolute;bottom:0;right:0;width:9px;height:9px;border-radius:50%;background:var(--green);border:2px solid #fff}
+.dname{font-size:13px;font-weight:600}
+.dsub{font-size:11px;color:var(--ink3);margin-top:1px}
+.star{color:#E59B1A}
+
+/* buttons */
+.btn-book{width:100%;padding:12px;background:var(--green);color:#fff;border:none;border-radius:var(--radius);font-size:14px;font-weight:600;cursor:pointer;margin-top:6px;transition:background .2s}
+.btn-book:hover{background:var(--green-d)}
+.btn-book:disabled{background:#9FE1CB;cursor:not-allowed}
+.btn-cancel{width:100%;padding:10px;border:1.5px solid var(--red);background:transparent;color:var(--red);border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;transition:all .2s;margin-top:8px}
+.btn-cancel:hover{background:var(--red-l)}
+.btn-new{width:100%;padding:11px;background:var(--green);color:#fff;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;cursor:pointer;margin-top:10px}
+
+/* tabs */
+.stabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
+.stab{flex:1;text-align:center;padding:11px 4px;font-size:12px;font-weight:500;color:var(--ink3);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s}
+.stab.on{color:var(--green);border-bottom-color:var(--green)}
+.stab-pane{display:none}.stab-pane.on{display:flex;flex-direction:column;flex:1;overflow:hidden}
+
+/* live panel */
+.live-scroll{flex:1;overflow-y:auto;padding:14px}
+.live-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;letter-spacing:.5px;color:var(--green);background:var(--green-l);padding:3px 8px;border-radius:20px}
+.track-card{background:var(--bg);border-radius:var(--radius);padding:12px;margin-top:8px}
+.prog-bar{height:5px;background:var(--border);border-radius:5px;overflow:hidden;margin:8px 0 4px}
+.prog-fill{height:100%;background:var(--green);border-radius:5px;transition:width 1s linear}
+.eta-big{font-size:28px;font-weight:700;color:var(--green)}
+.info-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px}
+.info-cell{background:var(--bg);border-radius:var(--radius-sm);padding:8px;text-align:center;font-size:11px;color:var(--ink3)}
+.info-cell b{display:block;font-size:13px;font-weight:600;color:var(--ink);margin-bottom:2px}
+.arrived-box{background:var(--green-l);border:1.5px solid var(--green);border-radius:var(--radius);padding:16px;text-align:center;margin-top:8px}
+
+/* fleet */
+.fleet-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+.fleet-item:last-child{border-bottom:none}
+.fs{font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px}
+.fs-av{background:var(--green-l);color:var(--green-d)}
+.fs-bu{background:var(--amber-l);color:#7A5000}
+.fs-of{background:var(--border);color:var(--ink3)}
+
+/* ws log */
+.ws-log{background:#0F1117;border-radius:var(--radius);padding:10px;font-family:'Courier New',monospace;font-size:10px;max-height:160px;overflow-y:auto;margin-top:8px;color:#9FE1CB}
+.ws-log-item{margin-bottom:3px;line-height:1.4}
+.wl-ts{color:#4A4D52}
+.wl-type{color:#1A9E6E;font-weight:700}
+.wl-err{color:#D94F3D}
+.wl-info{color:#E59B1A}
+
+/* map */
+.map-wrap{flex:1;position:relative;min-width:0}
+#map{width:100%;height:100%}
+.map-hint{position:absolute;top:12px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,.96);border:1px solid var(--border);border-radius:24px;padding:8px 16px;font-size:12px;font-weight:500;color:var(--ink2);z-index:400;pointer-events:none;box-shadow:var(--shadow);white-space:nowrap;transition:opacity .5s}
+.map-hint.hide{opacity:0}
+.map-fab{position:absolute;right:14px;top:14px;z-index:400;display:flex;flex-direction:column;gap:6px}
+.fab{width:36px;height:36px;border-radius:50%;background:var(--card);border:1px solid var(--border);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow);transition:background .2s}
+.fab:hover{background:var(--green-l)}
+.leaflet-popup-content-wrapper{border-radius:8px!important;box-shadow:var(--shadow)!important;border:1px solid var(--border)!important}
+.leaflet-popup-content{margin:10px 14px!important;font-size:13px!important;font-family:var(--font)!important;line-height:1.6!important}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo">Nep<span>Ride</span></div>
+  <div class="pill-live"><span class="pulse"></span> Dashboard</div>
+  <div class="topbar-right">
+    <div class="stat-chip" id="chip-drivers">5 drivers online</div>
+    <div class="stat-chip" id="chip-rides">0 active rides</div>
+    <div class="stat-chip">Kathmandu, Nepal</div>
+    <div class="api-badge api-disconnected" id="api-badge">⚡ API: localhost:8000</div>
+  </div>
+</div>
+
+<div class="body">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="stabs">
+      <div class="stab on" id="stab-book" onclick="goTab('book')">📍 Book</div>
+      <div class="stab" id="stab-live" onclick="goTab('live')">📡 Live</div>
+      <div class="stab" id="stab-fleet" onclick="goTab('fleet')">🚗 Fleet</div>
+      <div class="stab" id="stab-ws" onclick="goTab('ws')">🔌 API Log</div>
+    </div>
+
+    <!-- BOOK TAB -->
+    <div class="stab-pane on" id="pane-book">
+      <div class="sidebar-scroll">
+        <div class="hint-box" id="hint-box">
+          <b>👆 Click on the map</b> to place pins, or use the shortcuts below.<br>
+          Green pin = pickup · Red pin = dropoff · Pins are draggable.
+        </div>
+
+        <div class="sec-label">Pickup Location</div>
+        <div class="loc-card active-pin" id="card-pick" onclick="setPin('pick')">
+          <span class="loc-dot dot-g"></span>
+          <div class="loc-text">
+            <div class="loc-name" id="pick-name">Click map to set pickup</div>
+            <div class="loc-coords" id="pick-coords">—</div>
+          </div>
+          <div class="loc-clear" id="pick-clear" style="display:none" onclick="clearPin('pick',event)">✕</div>
+        </div>
+
+        <div class="sec-label">Dropoff Location</div>
+        <div class="loc-card" id="card-drop" onclick="setPin('drop')">
+          <span class="loc-dot dot-r"></span>
+          <div class="loc-text">
+            <div class="loc-name" id="drop-name">Click map to set dropoff</div>
+            <div class="loc-coords" id="drop-coords">—</div>
+          </div>
+          <div class="loc-clear" id="drop-clear" style="display:none" onclick="clearPin('drop',event)">✕</div>
+        </div>
+
+        <div class="sec-label">Quick Pickup</div>
+        <div class="chips">
+          <div class="chip" onclick="snap('pick','Thamel',27.7154,85.3123)">📍 Thamel</div>
+          <div class="chip" onclick="snap('pick','Patan',27.6644,85.3233)">📍 Patan</div>
+          <div class="chip" onclick="snap('pick','Airport',27.6966,85.3591)">📍 Airport</div>
+          <div class="chip" onclick="snap('pick','Swayambhu',27.7149,85.2904)">📍 Swayambhu</div>
+          <div class="chip" onclick="snap('pick','Bus Park',27.7367,85.3219)">📍 Bus Park</div>
+          <div class="chip" onclick="snap('pick','Maharajgunj',27.7378,85.3329)">📍 Maharajgunj</div>
+        </div>
+
+        <div class="sec-label">Quick Dropoff</div>
+        <div class="chips">
+          <div class="chip" onclick="snap('drop','Pashupatinath',27.7104,85.3487)">🎯 Pashupati</div>
+          <div class="chip" onclick="snap('drop','Boudhanath',27.7215,85.3620)">🎯 Boudha</div>
+          <div class="chip" onclick="snap('drop','Durbar Marg',27.7089,85.3152)">🎯 Durbar Marg</div>
+          <div class="chip" onclick="snap('drop','Bhaktapur',27.6722,85.4278)">🎯 Bhaktapur</div>
+          <div class="chip" onclick="snap('drop','Chabahil',27.7174,85.3528)">🎯 Chabahil</div>
+          <div class="chip" onclick="snap('drop','Balaju',27.7337,85.2982)">🎯 Balaju</div>
+        </div>
+
+        <div class="sec-label">Fare Estimate</div>
+        <div class="fare-card dim" id="fare-card">
+          <div class="fare-row">
+            <div>
+              <div class="fare-num" id="fare-num">NPR —</div>
+              <div class="fare-meta" id="fare-meta">Set locations to calculate</div>
+            </div>
+          </div>
+          <div class="ride-pills">
+            <div class="rpill on" onclick="setPill(this,1,'economy')">
+              <span class="rpill-icon">🚗</span>Economy<span class="rpill-price" id="pp-eco">—</span>
+            </div>
+            <div class="rpill" onclick="setPill(this,1.4,'comfort')">
+              <span class="rpill-icon">🛋️</span>Comfort<span class="rpill-price" id="pp-com">—</span>
+            </div>
+            <div class="rpill" onclick="setPill(this,1.9,'suv')">
+              <span class="rpill-icon">🚙</span>SUV<span class="rpill-price" id="pp-suv">—</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="sec-label">Nearest Drivers</div>
+        <div id="driver-list">
+          <div style="font-size:12px;color:var(--ink3);text-align:center;padding:16px 0">Set pickup to see nearby drivers</div>
+        </div>
+
+        <button class="btn-book" id="btn-book" disabled onclick="bookRide()">Set locations to book</button>
+      </div>
+    </div>
+
+    <!-- LIVE TAB -->
+    <div class="stab-pane" id="pane-live">
+      <div class="live-scroll" id="live-inner">
+        <div style="text-align:center;padding:40px 0;color:var(--ink3);font-size:13px">
+          No active ride.<br><br>Book a ride from the <b>Book</b> tab<br>to start live tracking here.
+        </div>
+      </div>
+    </div>
+
+    <!-- FLEET TAB -->
+    <div class="stab-pane" id="pane-fleet">
+      <div class="sidebar-scroll">
+        <div class="sec-label">All Drivers</div>
+        <div id="fleet-list"></div>
+        <div class="sec-label" style="margin-top:16px">Backend Endpoint</div>
+        <div style="font-size:11px;background:#0F1117;color:#9FE1CB;border-radius:var(--radius-sm);padding:10px 12px;font-family:monospace;line-height:1.8">
+          GET&nbsp; /api/drivers<br>
+          POST /api/drivers/{id}/location<br>
+          PUT&nbsp; /api/drivers/{id}/status<br>
+          WS&nbsp;&nbsp; /ws/dispatcher
+        </div>
+      </div>
+    </div>
+
+    <!-- WS LOG TAB -->
+    <div class="stab-pane" id="pane-ws">
+      <div class="sidebar-scroll">
+        <div class="sec-label">WebSocket Connection</div>
+        <div style="font-size:12px;margin-bottom:8px;color:var(--ink2)">
+          Connects to <code style="background:var(--bg);padding:2px 5px;border-radius:4px;font-size:11px">ws://localhost:8000/ws/passenger/{ride_id}</code>
+        </div>
+        <button onclick="testApiConnection()" style="width:100%;padding:9px;border:1.5px solid var(--green);background:var(--green-l);color:var(--green-d);border-radius:var(--radius-sm);font-size:12px;font-weight:600;cursor:pointer;margin-bottom:8px">
+          🔌 Test API Connection
+        </button>
+        <div class="sec-label">Message Log</div>
+        <div class="ws-log" id="ws-log">
+          <div class="ws-log-item"><span class="wl-info">ℹ</span> Dashboard ready. Start a ride to see live WebSocket messages here.</div>
+        </div>
+        <div class="sec-label" style="margin-top:12px">REST Endpoints</div>
+        <div style="font-size:11px;background:#0F1117;color:#9FE1CB;border-radius:var(--radius-sm);padding:10px 12px;font-family:monospace;line-height:1.8">
+          POST /api/rides/fare<br>
+          POST /api/rides/nearby-drivers<br>
+          POST /api/rides/book<br>
+          GET&nbsp; /api/rides/{ride_id}<br>
+          PUT&nbsp; /api/rides/{ride_id}/cancel
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAP -->
+  <div class="map-wrap">
+    <div class="map-hint" id="map-hint">🟢 Click anywhere on the map to set your <b>pickup</b></div>
+    <div id="map"></div>
+    <div class="map-fab">
+      <div class="fab" onclick="map.setView([27.7172,85.3240],14)" title="Reset view">🏠</div>
+      <div class="fab" onclick="clearAll()" title="Clear all pins">🗑️</div>
+      <div class="fab" onclick="map.zoomIn()" title="Zoom in">+</div>
+      <div class="fab" onclick="map.zoomOut()" title="Zoom out">−</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── Config ──────────────────────────────────────────────────────────
+const API_BASE = 'http://localhost:8000';
+const WS_BASE  = 'ws://localhost:8000';
+
+// ── Seed data (mirrors FastAPI store.py) ────────────────────────────
+const DRIVERS = [
+  {id:'d1',name:'Ram Kumar',    plate:'BA 1 PA 2345', vehicle:'Hyundai i20',    rating:4.9, status:'available', lat:27.7210, lng:85.3080, color:'#E1F5EE', tc:'#0E6B4A', init:'RK'},
+  {id:'d2',name:'Sita Paudel',  plate:'BA 2 KA 5678', vehicle:'Suzuki Swift',   rating:4.7, status:'available', lat:27.7080, lng:85.3200, color:'#E6F1FB', tc:'#185FA5', init:'SP'},
+  {id:'d3',name:'Bikash Tamang',plate:'BA 3 CHA 9012',vehicle:'Toyota Vitz',    rating:4.8, status:'available', lat:27.7300, lng:85.3350, color:'#EEEDFE', tc:'#534AB7', init:'BT'},
+  {id:'d4',name:'Gita Rai',     plate:'BA 4 JA 3456', vehicle:'Mahindra Bolero',rating:4.6, status:'available', lat:27.6950, lng:85.3450, color:'#FEF7E6', tc:'#7A5000', init:'GR'},
+  {id:'d5',name:'Rohan Shrestha',plate:'BA 5 NA 7890',vehicle:'Honda City',     rating:4.9, status:'busy',      lat:27.7150, lng:85.2950, color:'#F0F0F0', tc:'#4A4D52', init:'RS'},
+];
+
+// ── State ────────────────────────────────────────────────────────────
+let st = {
+  activePin:'pick', pick:null, drop:null,
+  rideType:'economy', mult:1, selDriver:null,
+  booked:false, rideId:null,
+  distKm:0, durSec:0, routeCoords:[],
+  animInt:null, ws:null,
+};
+
+// ── Leaflet map globals ──────────────────────────────────────────────
+let map, pickMarker, dropMarker, routeLine, liveMarker;
+let driverMarkers = {};
+const geocodeCache = {};
+
+// ════════════════════════════════════════════════════════════════════
+// MAP INITIALISATION
+// ════════════════════════════════════════════════════════════════════
+function initMap() {
+  map = L.map('map', {zoomControl:false}).setView([27.7172, 85.3240], 14);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a> contributors',
+    maxZoom: 19,
+  }).addTo(map);
+
+  // Driver markers
+  DRIVERS.forEach(d => {
+    const m = L.marker([d.lat, d.lng], {icon: makeDriverIcon(d)}).addTo(map);
+    m.bindPopup(`<b>${d.name}</b><br>${d.vehicle} · ${d.plate}<br>⭐ ${d.rating} · <b style="color:${d.status==='available'?'#1A9E6E':'#E59B1A'}">${cap(d.status)}</b>`);
+    driverMarkers[d.id] = m;
+  });
+
+  map.on('click', onMapClick);
+  renderFleet();
+  renderDriverList();
+
+  // Idle GPS drift simulation
+  setInterval(() => {
+    if (st.booked) return;
+    DRIVERS.forEach(d => {
+      if (d.status === 'busy') return;
+      d.lat += (Math.random() - .5) * .0007;
+      d.lng += (Math.random() - .5) * .0007;
+      driverMarkers[d.id]?.setLatLng([d.lat, d.lng]);
+    });
+    renderDriverList();
+  }, 2500);
+
+  // Try connecting to FastAPI
+  testApiConnection();
+}
+
+// ════════════════════════════════════════════════════════════════════
+// PIN PLACEMENT
+// ════════════════════════════════════════════════════════════════════
+function onMapClick(e) {
+  const {lat, lng} = e.latlng;
+  placePin(st.activePin, lat, lng, `${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+  st.activePin = (st.activePin === 'pick') ? 'drop' : 'pick';
+  updateHint(st.activePin === 'drop'
+    ? '🔴 Now click to set your <b>dropoff</b>'
+    : '🟢 Click to set a new <b>pickup</b>');
+}
+
+function makePin(type) {
+  const c = type === 'pick' ? '#1A9E6E' : '#D94F3D';
+  return L.divIcon({
+    html: `<div style="display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 2px 5px rgba(0,0,0,.35))">
+             <div style="width:18px;height:18px;border-radius:50% 50% 50% 0;background:${c};border:3px solid #fff;transform:rotate(-45deg)"></div>
+           </div>`,
+    iconSize:[18,22], iconAnchor:[9,22], className:'',
+  });
+}
+
+function makeDriverIcon(d) {
+  const busy = d.status === 'busy';
+  return L.divIcon({
+    html: `<div style="width:34px;height:34px;border-radius:50%;background:${d.color};border:2.5px solid ${d.tc};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${d.tc};box-shadow:0 2px 7px rgba(0,0,0,.22);position:relative">
+             ${d.init}
+             <span style="position:absolute;bottom:-1px;right:-1px;width:9px;height:9px;border-radius:50%;background:${busy?'#E59B1A':'#1A9E6E'};border:2px solid #fff"></span>
+           </div>`,
+    iconSize:[34,34], iconAnchor:[17,17], className:'',
+  });
+}
+
+function makeLiveIcon(d) {
+  return L.divIcon({
+    html: `<div style="width:40px;height:40px;border-radius:50%;background:${d.color};border:3px solid ${d.tc};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:${d.tc};box-shadow:0 3px 12px rgba(0,0,0,.3)">${d.init}</div>`,
+    iconSize:[40,40], iconAnchor:[20,20], className:'',
+  });
+}
+
+function placePin(type, lat, lng, label) {
+  reverseGeocode(lat, lng, label, name => {
+    if (type === 'pick') {
+      pickMarker?.remove();
+      pickMarker = L.marker([lat,lng], {icon:makePin('pick'), draggable:true}).addTo(map);
+      pickMarker.bindPopup(`<b>Pickup:</b> ${name}`);
+      pickMarker.on('dragend', e => {
+        const p = e.target.getLatLng();
+        placePin('pick', p.lat, p.lng, `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`);
+      });
+      st.pick = {lat, lng, name};
+      document.getElementById('pick-name').textContent = name;
+      document.getElementById('pick-coords').textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+      document.getElementById('card-pick').classList.add('filled');
+      document.getElementById('pick-clear').style.display = 'flex';
+    } else {
+      dropMarker?.remove();
+      dropMarker = L.marker([lat,lng], {icon:makePin('drop'), draggable:true}).addTo(map);
+      dropMarker.bindPopup(`<b>Dropoff:</b> ${name}`);
+      dropMarker.on('dragend', e => {
+        const p = e.target.getLatLng();
+        placePin('drop', p.lat, p.lng, `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`);
+      });
+      st.drop = {lat, lng, name};
+      document.getElementById('drop-name').textContent = name;
+      document.getElementById('drop-coords').textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+      document.getElementById('card-drop').classList.add('filled');
+      document.getElementById('drop-clear').style.display = 'flex';
+    }
+    if (st.pick && st.drop) fetchRoute();
+    else renderDriverList();
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════
+// REVERSE GEOCODING (Nominatim)
+// ════════════════════════════════════════════════════════════════════
+function reverseGeocode(lat, lng, fallback, cb) {
+  const key = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+  if (geocodeCache[key]) { cb(geocodeCache[key]); return; }
+  fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=17`)
+    .then(r => r.json())
+    .then(d => {
+      const a = d.address || {};
+      const name = a.road || a.suburb || a.neighbourhood || a.city_district || a.town || d.display_name?.split(',')[0] || fallback;
+      geocodeCache[key] = name;
+      cb(name);
+    })
+    .catch(() => cb(fallback));
+}
+
+// ════════════════════════════════════════════════════════════════════
+// ROUTING (OSRM → FastAPI fallback)
+// ════════════════════════════════════════════════════════════════════
+async function fetchRoute() {
+  if (!st.pick || !st.drop) return;
+  routeLine?.remove();
+
+  // Try FastAPI backend first
+  try {
+    const res = await fetch(`${API_BASE}/api/rides/fare`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        pickup:  {lat:st.pick.lat, lng:st.pick.lng, name:st.pick.name},
+        dropoff: {lat:st.drop.lat, lng:st.drop.lng, name:st.drop.name},
+        ride_type: st.rideType,
+      }),
+    });
+    if (res.ok) {
+      const fare = await res.json();
+      st.distKm = fare.distance_km;
+      st.durSec = fare.duration_min * 60;
+      wsLog('info', `fare: NPR ${fare.total_fare} · ${fare.distance_km}km · ${fare.duration_min}min`);
+    }
+  } catch(e) { /* fallback below */ }
+
+  // Always fetch real road geometry from OSRM
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${st.pick.lng},${st.pick.lat};${st.drop.lng},${st.drop.lat}?overview=full&geometries=geojson`;
+    const r = await fetch(url); const d = await r.json();
+    const route = d.routes[0];
+    st.routeCoords = route.geometry.coordinates.map(c => [c[1], c[0]]);
+    if (!st.distKm) { st.distKm = route.distance/1000; st.durSec = route.duration; }
+  } catch(e) {
+    st.routeCoords = [[st.pick.lat,st.pick.lng],[st.drop.lat,st.drop.lng]];
+    if (!st.distKm) { st.distKm = haversine(st.pick.lat,st.pick.lng,st.drop.lat,st.drop.lng); st.durSec = st.distKm/30*3600; }
+  }
+
+  routeLine = L.polyline(st.routeCoords, {color:'#1A9E6E', weight:5, opacity:.85, dashArray:'10 6', lineCap:'round'}).addTo(map);
+  map.fitBounds(routeLine.getBounds(), {paddingTopLeft:[20,20], paddingBottomRight:[20,20]});
+  updateFare();
+  renderDriverList();
+
+  // Also fetch nearby drivers from API
+  try {
+    const res = await fetch(`${API_BASE}/api/rides/nearby-drivers`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({pickup:{lat:st.pick.lat,lng:st.pick.lng}, ride_type:st.rideType}),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      wsLog('success', `Found ${data.drivers.length} nearby drivers from API`);
+    }
+  } catch(e) {}
+}
+
+// ════════════════════════════════════════════════════════════════════
+// FARE
+// ════════════════════════════════════════════════════════════════════
+function updateFare() {
+  if (!st.distKm) return;
+  const d = st.distKm, min = Math.round(st.durSec/60);
+  const eco = Math.round(d*85+50), com = Math.round(d*119+70), suv = Math.round(d*162+90);
+  const map = {economy:eco, comfort:com, suv:suv};
+  document.getElementById('fare-num').textContent  = `NPR ${Math.round(map[st.rideType]*st.mult)}`;
+  document.getElementById('fare-meta').textContent = `${d.toFixed(1)} km · ~${min} min · Kathmandu road`;
+  document.getElementById('pp-eco').textContent = `NPR ${eco}`;
+  document.getElementById('pp-com').textContent = `NPR ${com}`;
+  document.getElementById('pp-suv').textContent = `NPR ${suv}`;
+  document.getElementById('fare-card').classList.remove('dim');
+  const btn = document.getElementById('btn-book');
+  btn.disabled = false;
+  btn.textContent = `Book ${cap(st.rideType)} · NPR ${Math.round(map[st.rideType]*st.mult)}`;
+}
+
+function setPill(el, mult, type) {
+  document.querySelectorAll('.rpill').forEach(p => p.classList.remove('on'));
+  el.classList.add('on'); st.mult = mult; st.rideType = type; updateFare();
+}
+
+// ════════════════════════════════════════════════════════════════════
+// DRIVER LIST
+// ════════════════════════════════════════════════════════════════════
+function renderDriverList() {
+  const el = document.getElementById('driver-list');
+  if (!st.pick) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--ink3);text-align:center;padding:16px 0">Set pickup to see nearby drivers</div>';
+    return;
+  }
+  const sorted = DRIVERS.filter(d => d.status === 'available').map(d => ({
+    ...d, dist: haversine(st.pick.lat, st.pick.lng, d.lat, d.lng),
+    etaMin: Math.max(1, Math.round(haversine(st.pick.lat, st.pick.lng, d.lat, d.lng)/30*60)),
+  })).sort((a,b) => a.dist - b.dist).slice(0,4);
+
+  if (!sorted.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--ink3);text-align:center;padding:16px 0">No drivers available nearby</div>';
+    return;
+  }
+  if (!st.selDriver) st.selDriver = sorted[0].id;
+
+  el.innerHTML = sorted.map((d,i) => `
+    <div class="dcard${d.id===st.selDriver?' on':''}" onclick="pickDriver('${d.id}',${d.lat},${d.lng})">
+      <div class="avatar" style="width:38px;height:38px;font-size:12px;background:${d.color};color:${d.tc}">
+        ${d.init}<span class="av-dot"></span>
+      </div>
+      <div style="flex:1">
+        <div class="dname">${d.name}</div>
+        <div class="dsub"><span class="star">★</span> ${d.rating} · ${d.vehicle}</div>
+        <div class="dsub">${d.plate}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:14px;font-weight:700;color:var(--green)">${d.etaMin} min</div>
+        <div style="font-size:10px;color:var(--ink3)">${d.dist.toFixed(1)} km away</div>
+      </div>
+    </div>`).join('');
+}
+
+function pickDriver(id, lat, lng) {
+  st.selDriver = id;
+  renderDriverList();
+  map.panTo([lat, lng], {animate:true, duration:.6});
+}
+
+// ════════════════════════════════════════════════════════════════════
+// BOOK RIDE → WEBSOCKET LIVE TRACKING
+// ════════════════════════════════════════════════════════════════════
+async function bookRide() {
+  if (!st.pick || !st.drop) return;
+  const driver = DRIVERS.find(d => d.id === st.selDriver) || DRIVERS[0];
+
+  // Try FastAPI booking
+  try {
+    const res = await fetch(`${API_BASE}/api/rides/book`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        passenger_id: 'user-dashboard-001',
+        pickup:   {lat:st.pick.lat, lng:st.pick.lng, name:st.pick.name},
+        dropoff:  {lat:st.drop.lat, lng:st.drop.lng, name:st.drop.name},
+        ride_type: st.rideType,
+        driver_id: st.selDriver,
+      }),
+    });
+    if (res.ok) {
+      const ride = await res.json();
+      st.rideId = ride.ride_id;
+      wsLog('success', `Ride booked: ${ride.ride_id.slice(0,8)}…`);
+      connectPassengerWS(st.rideId, driver);
+    } else {
+      wsLog('err', 'API booking failed — running in demo mode');
+      startDemoTracking(driver);
+    }
+  } catch(e) {
+    wsLog('err', 'No API connection — running in demo mode');
+    startDemoTracking(driver);
+  }
+
+  st.booked = true;
+  DRIVERS.find(d => d.id === driver.id).status = 'busy';
+  document.getElementById('chip-rides').textContent = '1 active ride';
+  renderFleet();
+  goTab('live');
+  renderLiveUI(driver, 'Connecting…', 'Locating your driver', 0, st.durSec);
+}
+
+// ── WebSocket: real backend ──────────────────────────────────────────
+function connectPassengerWS(rideId, driver) {
+  const wsUrl = `${WS_BASE}/ws/passenger/${rideId}`;
+  wsLog('info', `WS connecting: ${wsUrl}`);
+  st.ws = new WebSocket(wsUrl);
+
+  st.ws.onopen = () => wsLog('success', 'WebSocket connected ✓');
+
+  st.ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    wsLog('success', `${msg.type} ${JSON.stringify(msg).slice(0,80)}…`);
+
+    if (msg.type === 'location_update') {
+      const {lat, lng} = msg.location;
+      liveMarker?.setLatLng([lat, lng]);
+      map.panTo([lat, lng], {animate:true, duration:.8});
+      renderLiveUI(driver,
+        getStatusLabel(msg.progress_pct||0),
+        getStatusMsg(msg.progress_pct||0, driver, st),
+        msg.progress_pct||0, msg.eta_seconds||0);
+    }
+
+    if (msg.type === 'ride_status') {
+      if (msg.status === 'completed') renderArrived(driver);
+    }
+  };
+
+  st.ws.onerror = () => {
+    wsLog('err', 'WS error — switching to demo mode');
+    startDemoTracking(driver);
+  };
+
+  st.ws.onclose = () => wsLog('info', 'WebSocket closed');
+}
+
+// ── Demo tracking (no backend) ───────────────────────────────────────
+function startDemoTracking(driver) {
+  if (st.animInt) clearInterval(st.animInt);
+  liveMarker?.remove();
+
+  const path = [[driver.lat, driver.lng], ...st.routeCoords];
+  let step = 0; const total = path.length - 1;
+  liveMarker = L.marker([driver.lat, driver.lng], {icon:makeLiveIcon(driver), zIndexOffset:2000}).addTo(map);
+
+  st.animInt = setInterval(() => {
+    if (step >= total) {
+      clearInterval(st.animInt);
+      liveMarker?.setLatLng([st.drop.lat, st.drop.lng]);
+      renderArrived(driver);
+      return;
+    }
+    step++;
+    const pct = Math.round((step/total)*100);
+    const pos = path[Math.min(step, path.length-1)];
+    liveMarker.setLatLng(pos);
+    map.panTo(pos, {animate:true, duration:.8});
+    const eta = Math.max(0, Math.round((total-step)/total*st.durSec));
+    renderLiveUI(driver, getStatusLabel(pct), getStatusMsg(pct, driver, st), pct, eta);
+    wsLog('success', `location_update lat:${pos[0].toFixed(5)} lng:${pos[1].toFixed(5)} eta:${eta}s`);
+  }, 200);
+}
+
+function getStatusLabel(pct) {
+  if (pct < 30) return 'Driver on the way';
+  if (pct < 50) return 'Arriving at pickup';
+  if (pct < 55) return 'Driver arrived';
+  if (pct < 90) return 'Trip in progress';
+  if (pct < 100) return 'Almost there';
+  return 'Arrived!';
+}
+function getStatusMsg(pct, driver, st) {
+  if (pct < 30) return `${driver.name} is heading to your pickup`;
+  if (pct < 50) return 'Almost at your pickup point';
+  if (pct < 55) return 'Your driver is waiting — please come out';
+  if (pct < 90) return `Heading to ${st.drop?.name||'destination'}`;
+  if (pct < 100) return 'Arriving at destination soon';
+  return 'You have arrived!';
+}
+
+// ════════════════════════════════════════════════════════════════════
+// LIVE PANEL UI
+// ════════════════════════════════════════════════════════════════════
+function renderLiveUI(driver, status, msg, pct, etaSec) {
+  const etaMin = Math.max(0, Math.ceil(etaSec/60));
+  document.getElementById('live-inner').innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <span style="font-size:14px;font-weight:700">Live Tracking</span>
+      <span class="live-badge"><span class="pulse"></span> LIVE</span>
+    </div>
+
+    <div class="track-card">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <div class="avatar" style="width:42px;height:42px;font-size:13px;background:${driver.color};color:${driver.tc}">
+          ${driver.init}<span class="av-dot"></span>
+        </div>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:700">${driver.name}</div>
+          <div style="font-size:11px;color:var(--ink3)">${driver.vehicle} · ${driver.plate}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="eta-big">${etaMin}<span style="font-size:13px;font-weight:400;color:var(--ink3)">m</span></div>
+          <div style="font-size:10px;color:var(--ink3)">ETA</div>
+        </div>
+      </div>
+      <div style="font-size:14px;font-weight:700;margin-bottom:3px">${status}</div>
+      <div style="font-size:12px;color:var(--ink3);margin-bottom:8px">${msg}</div>
+      <div class="prog-bar"><div class="prog-fill" style="width:${pct}%"></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ink3);margin-top:3px">
+        <span>📍 ${st.pick?.name||'Pickup'}</span>
+        <span>${pct}%</span>
+        <span>🎯 ${st.drop?.name||'Dropoff'}</span>
+      </div>
+    </div>
+
+    <div class="info-grid">
+      <div class="info-cell"><b>${(st.distKm||0).toFixed(1)} km</b>Distance</div>
+      <div class="info-cell"><b>${document.getElementById('fare-num').textContent}</b>Fare</div>
+      <div class="info-cell"><b>${cap(st.rideType)}</b>Type</div>
+    </div>
+
+    <div style="background:var(--bg);border-radius:var(--radius);padding:10px 12px;font-size:12px;margin-top:8px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+        <span style="color:var(--ink3)">From</span><span style="font-weight:500;text-align:right;max-width:60%">${st.pick?.name||'—'}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between">
+        <span style="color:var(--ink3)">To</span><span style="font-weight:500;text-align:right;max-width:60%">${st.drop?.name||'—'}</span>
+      </div>
+    </div>
+
+    <button class="btn-cancel" onclick="cancelRide()">✕ Cancel Ride</button>`;
+}
+
+function renderArrived(driver) {
+  const fare = document.getElementById('fare-num').textContent;
+  document.getElementById('live-inner').innerHTML = `
+    <div class="arrived-box">
+      <div style="font-size:36px;margin-bottom:6px">✅</div>
+      <div style="font-size:16px;font-weight:700;color:var(--green-d)">You have arrived!</div>
+      <div style="font-size:12px;color:var(--green-d);margin-top:4px">Trip completed with ${driver.name}</div>
+      <div style="margin-top:12px;font-size:26px;font-weight:800;color:var(--green-d)">${fare}</div>
+      <div style="font-size:11px;color:var(--green-d)">${(st.distKm||0).toFixed(1)} km · ${cap(st.rideType)}</div>
+      <div style="margin-top:12px;display:flex;gap:6px;justify-content:center;font-size:22px">
+        ⭐⭐⭐⭐⭐
+      </div>
+      <div style="font-size:11px;color:var(--green-d);margin-top:4px">Rate your trip</div>
+    </div>
+    <button class="btn-new" onclick="resetAll()">+ Book Another Ride</button>`;
+  document.getElementById('chip-rides').textContent = '0 active rides';
+  DRIVERS.find(d => d.id === driver.id).status = 'available';
+  renderFleet();
+  wsLog('success', 'ride_status: completed ✓');
+}
+
+// ════════════════════════════════════════════════════════════════════
+// FLEET TAB
+// ════════════════════════════════════════════════════════════════════
+function renderFleet() {
+  document.getElementById('fleet-list').innerHTML = DRIVERS.map(d => `
+    <div class="fleet-item">
+      <div class="avatar" style="width:34px;height:34px;font-size:11px;background:${d.color};color:${d.tc}">${d.init}</div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600">${d.name}</div>
+        <div style="font-size:11px;color:var(--ink3)">${d.vehicle} · ${d.plate} · ⭐${d.rating}</div>
+      </div>
+      <span class="fs ${d.status==='available'?'fs-av':d.status==='busy'?'fs-bu':'fs-of'}">${cap(d.status)}</span>
+    </div>`).join('');
+}
+
+// ════════════════════════════════════════════════════════════════════
+// API CONNECTION TEST
+// ════════════════════════════════════════════════════════════════════
+async function testApiConnection() {
+  wsLog('info', `Testing connection to ${API_BASE} …`);
+  try {
+    const r = await fetch(`${API_BASE}/`, {signal: AbortSignal.timeout(3000)});
+    if (r.ok) {
+      const d = await r.json();
+      document.getElementById('api-badge').className = 'api-badge api-connected';
+      document.getElementById('api-badge').textContent = `✅ API connected`;
+      wsLog('success', `API online: ${d.service} v${d.version}`);
+    }
+  } catch(e) {
+    document.getElementById('api-badge').className = 'api-badge api-disconnected';
+    document.getElementById('api-badge').textContent = `⚡ API: localhost:8000`;
+    wsLog('err', 'API not reachable — run: uvicorn app.main:app --reload --port 8000');
+    wsLog('info', 'Dashboard running in demo mode (no backend needed)');
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════════════════════════════
+function wsLog(type, msg) {
+  const log = document.getElementById('ws-log');
+  const ts  = new Date().toLocaleTimeString('en-US', {hour12:false});
+  const cls = type==='err'?'wl-err':type==='success'?'wl-type':'wl-info';
+  const icon = type==='err'?'✗':type==='success'?'✓':'ℹ';
+  log.innerHTML += `<div class="ws-log-item"><span class="wl-ts">${ts}</span> <span class="${cls}">${icon}</span> ${msg}</div>`;
+  log.scrollTop = log.scrollHeight;
+}
+
+function setPin(type) {
+  st.activePin = type;
+  updateHint(type === 'pick' ? '🟢 Click map to set pickup' : '🔴 Click map to set dropoff');
+  document.getElementById('card-pick').classList.toggle('active-pin', type==='pick');
+  document.getElementById('card-drop').classList.toggle('active-pin', type==='drop');
+}
+
+function clearPin(type, e) {
+  e?.stopPropagation();
+  if (type==='pick') {
+    pickMarker?.remove(); pickMarker=null; st.pick=null;
+    document.getElementById('pick-name').textContent='Click map to set pickup';
+    document.getElementById('pick-coords').textContent='—';
+    document.getElementById('card-pick').classList.remove('filled');
+    document.getElementById('pick-clear').style.display='none';
+  } else {
+    dropMarker?.remove(); dropMarker=null; st.drop=null;
+    document.getElementById('drop-name').textContent='Click map to set dropoff';
+    document.getElementById('drop-coords').textContent='—';
+    document.getElementById('card-drop').classList.remove('filled');
+    document.getElementById('drop-clear').style.display='none';
+  }
+  routeLine?.remove(); routeLine=null;
+  document.getElementById('fare-card').classList.add('dim');
+  const btn = document.getElementById('btn-book');
+  btn.disabled=true; btn.textContent='Set locations to book';
+  renderDriverList();
+  updateHint('🟢 Click map to set pickup');
+}
+
+function clearAll() { clearPin('pick'); clearPin('drop'); }
+
+function snap(type, name, lat, lng) { placePin(type, lat, lng, name); }
+
+function cancelRide() {
+  if (st.animInt) clearInterval(st.animInt);
+  if (st.ws) { st.ws.close(); st.ws=null; }
+  liveMarker?.remove(); liveMarker=null;
+  st.booked=false; st.rideId=null;
+  document.getElementById('chip-rides').textContent='0 active rides';
+  document.getElementById('live-inner').innerHTML=`
+    <div style="text-align:center;padding:40px 0;color:var(--ink3);font-size:13px">
+      Ride cancelled.<br><br>Book a new ride from the <b>Book</b> tab.
+    </div>`;
+  DRIVERS.forEach(d=>{if(d.status==='busy')d.status='available';});
+  renderFleet(); goTab('book');
+  wsLog('info','Ride cancelled by passenger');
+}
+
+function resetAll() {
+  cancelRide(); clearAll();
+  st={...st,distKm:0,durSec:0,routeCoords:[],selDriver:null};
+  goTab('book');
+}
+
+function updateHint(msg) {
+  const el = document.getElementById('map-hint');
+  el.innerHTML = msg; el.classList.remove('hide');
+  setTimeout(() => el.classList.add('hide'), 4000);
+}
+
+function goTab(t) {
+  ['book','live','fleet','ws'].forEach(x => {
+    document.getElementById(`stab-${x}`).classList.toggle('on', x===t);
+    document.getElementById(`pane-${x}`).classList.toggle('on', x===t);
+  });
+}
+
+function haversine(la1,ln1,la2,ln2){
+  const R=6371,d1=(la2-la1)*Math.PI/180,d2=(ln2-ln1)*Math.PI/180;
+  const a=Math.sin(d1/2)**2+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(d2/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function cap(s){return s.charAt(0).toUpperCase()+s.slice(1);}
+
+window.addEventListener('load', initMap);
+</script>
+</body>
+</html>
